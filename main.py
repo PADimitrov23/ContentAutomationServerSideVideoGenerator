@@ -53,7 +53,7 @@ async def generate(request: Request):
     if isinstance(body, list):
         script = body
         title = "YouTube Short"
-        upload_to_youtube = False
+        upload_to_youtube = True
     elif isinstance(body, dict):
         script = body.get("script", body.get("scenes", body.get("output")))
         title = body.get("title", "YouTube Short")
