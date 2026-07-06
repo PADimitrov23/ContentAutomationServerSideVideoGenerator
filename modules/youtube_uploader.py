@@ -20,10 +20,15 @@ def get_authenticated_service():
         else:
             if not os.path.exists(CLIENT_SECRETS_FILE):
                 print("Missing client_secret.json. Set up OAuth first.")
-                print("Run: python -c 'from modules.youtube_uploader import setup_oauth; setup_oauth()'")
+                print("Run: python setup_youtube.py")
                 return None
             flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, SCOPES)
-            credentials = flow.run_local_server(port=8080)
+            auth_url, _ = flow.authorization_url(prompt="consent")
+            print("Open this URL in your browser (on any machine):")
+            print(auth_url)
+            code = input("Enter the authorization code: ").strip()
+            flow.fetch_token(code=code)
+            credentials = flow.credentials
         with open(TOKEN_FILE, "wb") as f:
             pickle.dump(credentials, f)
     return build("youtube", "v3", credentials=credentials)
