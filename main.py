@@ -47,6 +47,12 @@ async def generate_video(script):
     clean_cache()
     return output_path
 
+@app.post("/debug")
+async def debug(request: Request):
+    body = await request.json()
+    print(f"DEBUG received: {type(body)} -> {str(body)[:500]}")
+    return {"received_type": str(type(body)), "body_preview": str(body)[:300]}
+
 @app.post("/generate")
 async def generate(request: Request):
     body = await request.json()
