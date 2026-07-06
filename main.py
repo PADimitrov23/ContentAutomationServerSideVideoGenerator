@@ -52,14 +52,25 @@ async def generate(request: Request):
     body = await request.json()
     if isinstance(body, list):
         script = body
+        title = "YouTube Short"
+        upload_to_youtube = False
     elif isinstance(body, dict):
         script = body.get("script", body.get("scenes", body.get("output")))
+        title = body.get("title", "YouTube Short")
+        upload_to_youtube = body.get("youtube", False)
         if script is None:
             return {"status": "error", "message": "No script array found in request body"}
     else:
         return {"status": "error", "message": "Invalid request body"}
     output_path = await generate_video(script)
     if output_path:
+        if upload_to_youtube:
+            try:
+                from modules.youtube_uploader import upload_video
+                upload_video(output_path, title=title)
+            except Exception as e:
+                print(f"YouTube upload failed: {e}")
+                return {"status": "upload_failed", "video_path": output_path, "error": str(e)}
         return FileResponse(output_path, media_type="video/mp4", filename="final_short.mp4")
     return {"status": "error", "message": "Video generation failed"}
 
