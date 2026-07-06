@@ -22,10 +22,17 @@ def get_authenticated_service():
                 print("Missing client_secret.json. Set up OAuth first.")
                 print("Run: python setup_youtube.py")
                 return None
-            flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, SCOPES)
+            flow = InstalledAppFlow.from_client_secrets_file(
+                CLIENT_SECRETS_FILE, SCOPES,
+                redirect_uri="urn:ietf:wg:oauth:2.0:oob"
+            )
             auth_url, _ = flow.authorization_url(prompt="consent")
-            print("Open this URL in your browser (on any machine):")
+            print("=" * 60)
+            print("OPEN THIS URL in your browser (Windows machine):")
             print(auth_url)
+            print()
+            print("IMPORTANT: Sign in with the Google account that owns the YouTube channel")
+            print("=" * 60)
             code = input("Enter the authorization code: ").strip()
             flow.fetch_token(code=code)
             credentials = flow.credentials
