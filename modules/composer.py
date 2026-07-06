@@ -7,10 +7,14 @@ class Composer:
         self.temp_dir = os.path.join(os.getcwd(), "assets", "temp")
         self.final_dir = os.path.join(os.getcwd(), "assets", "final")
         self.avatar_path = os.path.join(os.getcwd(), "assets", "avatar", "avatars.mp4")
+        self.font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        if not os.path.exists(self.font_path):
+            self.font_path = None
         
         os.makedirs(self.temp_dir, exist_ok=True)
         os.makedirs(self.final_dir, exist_ok=True)
         self.transitions = ['fade', 'diagbr', 'diagtl']
+        self._textfiles = []
 
     def get_duration(self, filepath):
         try:
@@ -19,49 +23,52 @@ class Composer:
         except:
             return 0.0
 
+    def add_captions(self, video_stream, text, font_size=32):
+        if not self.font_path or not text:
+            return video_stream
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
+            f.write(text)
+            textfile = f.name
+        self._textfiles.append(textfile)
+        return video_stream.filter(
+            'drawtext',
+            textfile=textfile,
+            fontfile=self.font_path,
+            fontsize=font_size,
+            fontcolor='white',
+            shadowcolor='black',
+            shadowx=2,
+            shadowy=2,
+            x='(w-text_w)/2',
+            y='h-th-80',
+            enable='between(t,0,9999)'
+        )
+
     def process_scene(self, scene, video_pair, is_avatar=False):
-        """
-        Combines Audio with Visuals.
-        - If Avatar: Loop single video + CROP LOGO.
-        - If Stock: Split duration 50/50 between Video A and Video B.
-        """
         scene_id = scene['id']
         audio_path = scene['audio_path']
         total_duration = scene['duration']
         output_path = os.path.join(self.temp_dir, f"scene_{scene_id}.mp4")
+        scene_text = scene.get('text', '')
 
         try:
             input_audio = ffmpeg.input(audio_path)
 
             if is_avatar:
-                # --- AVATAR MODE (Single Loop + CROP) ---
-                print(f"   ⚙️ Processing Scene {scene_id}: 🤖 Avatar Mode (Cropped)")
-                
                 video_stream = (
                     ffmpeg.input(video_pair[0], stream_loop=-1)
                     .trim(duration=total_duration + 0.5)
                     .setpts('PTS-STARTPTS')
-                    
-                    # ---------------------------------------------------------
-                    # ✂️ LOGO REMOVAL CROP
-                    # ---------------------------------------------------------
-                    # Current setting: Removes 150px from BOTTOM.
-                    .filter('crop', 'iw', 'ih-150', 0, 0) 
-                    
-                    # ---------------------------------------------------------
-                    # 📏 RESIZE & CENTER
-                    # ---------------------------------------------------------
+                    .filter('crop', 'iw', 'ih-150', 0, 0)
                     .filter('scale', 1080, 1920, force_original_aspect_ratio='increase')
                     .filter('crop', 1080, 1920)
                     .filter('fps', fps=30, round='up')
                 )
             else:
-                # --- DUAL VIDEO MODE (50/50 Split) ---
-                print(f"   ⚙️ Processing Scene {scene_id}: 🎞️ A/B Split Mode")
                 path_a, path_b = video_pair
-                
                 duration_a = total_duration / 2
-                duration_b = (total_duration / 2) + 0.5 
+                duration_b = (total_duration / 2) + 0.5
 
                 stream_a = (
                     ffmpeg.input(path_a, stream_loop=-1)
@@ -81,17 +88,18 @@ class Composer:
 
                 video_stream = ffmpeg.concat(stream_a, stream_b, v=1, a=0)
 
-            # Combine Video + Audio
+            video_stream = self.add_captions(video_stream, scene_text)
+
             runner = ffmpeg.output(
-                video_stream, 
-                input_audio, 
-                output_path, 
-                vcodec='libx264', 
-                acodec='aac', 
+                video_stream,
+                input_audio,
+                output_path,
+                vcodec='libx264',
+                acodec='aac',
                 pix_fmt='yuv420p',
                 shortest=None
             )
-            
+
             runner.run(overwrite_output=True, quiet=True)
             return output_path
 
@@ -210,3 +218,10 @@ class Composer:
             error_log = e.stderr.decode('utf8') if e.stderr else str(e)
             print(f"❌ Stitching Error: {error_log}")
             return None
+        finally:
+            for f in self._textfiles:
+                try:
+                    os.unlink(f)
+                except:
+                    pass
+            self._textfiles = []
