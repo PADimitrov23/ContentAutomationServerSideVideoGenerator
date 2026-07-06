@@ -5,6 +5,7 @@ import shutil
 import sys
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse
 from modules.asset_manager import AssetManager
 from modules.audio import AudioEngine
 from modules.composer import Composer
@@ -59,23 +60,7 @@ async def generate(request: Request):
         return {"status": "error", "message": "Invalid request body"}
     output_path = await generate_video(script)
     if output_path:
-        return {"status": "ok", "video_path": output_path}
-    return {"status": "error", "message": "Video generation failed"}
-
-@app.post("/webhook")
-async def webhook(request: Request):
-    body = await request.json()
-    if isinstance(body, list):
-        script = body
-    elif isinstance(body, dict):
-        script = body.get("script", body.get("scenes", body.get("output")))
-        if script is None:
-            return {"status": "error", "message": "No script array found in request body"}
-    else:
-        return {"status": "error", "message": "Invalid request body"}
-    output_path = await generate_video(script)
-    if output_path:
-        return {"status": "ok", "video_path": output_path}
+        return FileResponse(output_path, media_type="video/mp4", filename="final_short.mp4")
     return {"status": "error", "message": "Video generation failed"}
 
 async def main():
