@@ -23,12 +23,23 @@ class Composer:
         except:
             return 0.0
 
-    def add_captions(self, video_stream, text, font_size=32):
+    def add_captions(self, video_stream, text, font_size=28):
         if not self.font_path or not text:
             return video_stream
         import tempfile
+        lines = []
+        words = text.split()
+        current = ""
+        for word in words:
+            if len(current + " " + word) > 40:
+                lines.append(current)
+                current = word
+            else:
+                current = (current + " " + word).strip()
+        if current:
+            lines.append(current)
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
-            f.write(text)
+            f.write("\n".join(lines[:3]))
             textfile = f.name
         self._textfiles.append(textfile)
         return video_stream.filter(
@@ -37,11 +48,11 @@ class Composer:
             fontfile=self.font_path,
             fontsize=font_size,
             fontcolor='white',
-            shadowcolor='black',
-            shadowx=2,
-            shadowy=2,
+            box=1,
+            boxcolor='black@0.5',
+            boxborderw=12,
             x='(w-text_w)/2',
-            y='h-th-80',
+            y='h-text_h-60',
             enable='between(t,0,9999)'
         )
 
