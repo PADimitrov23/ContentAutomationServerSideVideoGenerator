@@ -67,7 +67,8 @@ async def generate(request: Request):
         if upload_to_youtube:
             try:
                 from modules.youtube_uploader import upload_video
-                upload_video(output_path, title=title)
+                video_id = upload_video(output_path, title=title)
+                return {"status": "uploaded", "video_id": video_id, "url": f"https://youtu.be/{video_id}"}
             except Exception as e:
                 print(f"YouTube upload failed: {e}")
                 return {"status": "upload_failed", "video_path": output_path, "error": str(e)}
