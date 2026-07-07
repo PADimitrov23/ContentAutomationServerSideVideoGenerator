@@ -4,8 +4,24 @@ import os
 import shutil
 import sys
 import uvicorn
+from datetime import datetime
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
+
+LOG_FILE = os.path.join(os.getcwd(), "assets", "history.json")
+
+def append_log(entry):
+    if not os.path.exists(LOG_FILE):
+        with open(LOG_FILE, "w") as f:
+            json.dump([], f)
+    try:
+        with open(LOG_FILE, "r") as f:
+            logs = json.load(f)
+    except:
+        logs = []
+    logs.insert(0, entry)
+    with open(LOG_FILE, "w") as f:
+        json.dump(logs, f, indent=2)
 from modules.asset_manager import AssetManager
 from modules.audio import AudioEngine
 from modules.composer import Composer
@@ -47,6 +63,27 @@ async def generate_video(script):
     clean_cache()
     return output_path
 
+@app.get("/logs", response_class=HTMLResponse)
+async def view_logs():
+    if not os.path.exists(LOG_FILE):
+        return "<h2>No history yet</h2>"
+    try:
+        with open(LOG_FILE, "r") as f:
+            logs = json.load(f)
+    except:
+        return "<h2>No history yet</h2>"
+    rows = "".join(
+        f"<tr><td>{l['date'][:19]}</td><td>{l['title']}</td><td><a href='{l['url']}' target='_blank'>{l['url']}</a></td><td>{l['status']}</td></tr>"
+        for l in logs if l['url']
+    )
+    return f"""<!DOCTYPE html>
+<html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>Video History</title>
+<style>body{{font-family:sans-serif;padding:20px;background:#111;color:#fff}}table{{width:100%;border-collapse:collapse}}
+th,td{{padding:10px;text-align:left;border-bottom:1px solid #333}}th{{color:#888}}
+a{{color:#4fc3f7}}tr:hover{{background:#222}}</style></head>
+<body><h2>Video History</h2><table><tr><th>Date</th><th>Title</th><th>URL</th><th>Status</th></tr>{rows}</table></body></html>"""
+
 @app.post("/debug")
 async def debug(request: Request):
     body = await request.json()
@@ -69,17 +106,20 @@ async def generate(request: Request):
     else:
         return {"status": "error", "message": "Invalid request body"}
     output_path = await generate_video(script)
+    result = {"status": "error", "message": "Video generation failed"}
     if output_path:
         if upload_to_youtube:
             try:
                 from modules.youtube_uploader import upload_video
                 video_id = upload_video(output_path, title=title)
-                return {"status": "uploaded", "video_id": video_id, "url": f"https://youtu.be/{video_id}"}
+                result = {"status": "uploaded", "video_id": video_id, "url": f"https://youtu.be/{video_id}", "title": title}
             except Exception as e:
-                print(f"YouTube upload failed: {e}")
-                return {"status": "upload_failed", "video_path": output_path, "error": str(e)}
-        return FileResponse(output_path, media_type="video/mp4", filename="final_short.mp4")
-    return {"status": "error", "message": "Video generation failed"}
+                result = {"status": "upload_failed", "video_path": output_path, "error": str(e), "title": title}
+        else:
+            return FileResponse(output_path, media_type="video/mp4", filename="final_short.mp4")
+    entry = {"date": datetime.now().isoformat(), "title": result.get("title", ""), "url": result.get("url", ""), "status": result.get("status", "")}
+    append_log(entry)
+    return result
 
 async def main():
     if len(sys.argv) >= 2:
