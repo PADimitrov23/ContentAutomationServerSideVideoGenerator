@@ -31,7 +31,7 @@ class Composer:
         words = text.split()
         current = ""
         for word in words:
-                if len(current + " " + word) > 28:
+            if len(current + " " + word) > 28:
                 lines.append(current)
                 current = word
             else:
