@@ -23,7 +23,7 @@ class Composer:
         except:
             return 0.0
 
-    def add_captions(self, video_stream, text, font_size=28):
+    def add_captions(self, video_stream, text, font_size=36):
         if not self.font_path or not text:
             return video_stream
         import tempfile
@@ -31,7 +31,7 @@ class Composer:
         words = text.split()
         current = ""
         for word in words:
-            if len(current + " " + word) > 40:
+                if len(current + " " + word) > 28:
                 lines.append(current)
                 current = word
             else:
