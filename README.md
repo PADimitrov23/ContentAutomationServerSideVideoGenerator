@@ -1,179 +1,153 @@
-# 🎬 AutoShorts AI: The Automated Faceless Video Generator
+# ManifestAI - Automated Motivation & Manifestation Shorts Generator
 
-![Views](https://komarev.com/ghpvc/?username=SaarD00-AI-Youtube-Shorts-Generator&style=for-the-badge&color=blue)
+This is a friendly fork of [AutoShorts AI](https://github.com/SaarD00/AI-Youtube-Shorts-Generator) by SaarD00. All credit for the original pipeline goes to them — I just adapted it to my own needs.
 
-
-**AutoShorts AI** is a Python pipeline that creates viral-style "Faceless" YouTube Shorts and TikToks from a topic. It handles the production chain: AI topic/script generation, voiceover generation, stock footage sourcing, and FFmpeg editing with transitions and avatar injection.
-
----
-
-## ✨ Key Features
-
-- **🧠 Intelligent Scriptwriting:** Uses **Google Gemini 2.0 Flash** to write engaging, "Edutainment" style scripts (Vox/Kurzgesagt style) with strict storytelling structures (Hook → Context → Mechanism → Twist).
-- **🗣️ Voiceovers:** Generates narration with `edge-tts`.
-- **🎞️ Dual-Visual System:** Automatically searches and downloads **two distinct stock videos** per scene from **Pexels**, creating a dynamic "A/B Split" visual style to maximize viewer retention.
-- **✂️ Advanced FFmpeg Editing:**
-- **Smart Trimming:** Syncs video perfectly to audio duration.
-- **A/B Splitting:** Cuts every scene in half, switching visuals mid-sentence.
-- **Pro Transitions:** Randomly applies `xfade` (fade, slide, wipes) between scenes.
-- **Silence Removal:** Automatically trims dead air from AI voice generation.
-
-- **🤖 Random Avatar Injection:** Automatically inserts a custom "Avatar/Mascot" video into a random middle scene to build channel brand identity.
-- **🪟 Windows Ready:** Includes specific FFmpeg flags (`yuv420p`, `faststart`) to prevent corruption errors (`0x80004005`) on Windows Media Player.
+Instead of telling complex stories, this version is built for **daily motivational, manifestation, and psychological insight videos**. It takes a script JSON (from Ollama or any LLM), generates voiceover, finds matching stock footage, overlays captions, and optionally uploads straight to YouTube.
 
 ---
 
-## 📂 Project Structure
+## What changed from the original?
 
-```text
-Automated-YT-Shorts-AI/
-│
-├── assets/                  # Stores all media files
-│   ├── audio_clips/         # Generated voiceovers (.wav)
-│   ├── video_clips/         # Downloaded stock footage (.mp4)
-│   ├── temp/                # Intermediate processing files
-│   ├── final/               # 🏆 The Final Output Video lives here
-│   └── avatar/              # ⚠️ PUT YOUR AVATAR VIDEO HERE
-│       └── Professional_Girl_Animation_Video_Generation.mp4
-│
-├── modules/                 # Core Logic Modules
-│   ├── brain.py             # AI Scriptwriter (Gemini)
-│   ├── audio.py             # Voice generator (edge-tts)
-│   ├── asset_manager.py     # Pexels Downloader (Dual-Visual logic)
-│   └── composer.py          # FFmpeg Video Editor (Stitching & Transitions)
-│
-├── main.py                  # Entry point (Orchestrator)
-└── requirements.txt         # Python dependencies
+- **No Gemini dependency** — accepts script JSON from anywhere (Ollama, n8n, curl, etc.)
+- **Added HTTP server** — listens for POST requests, no CLI needed
+- **YouTube auto-upload** — one-time OAuth setup, then it posts videos automatically
+- **On-screen captions** — text overlays with word wrapping and semi-transparent background
+- **No avatar/mascot injection** — stripped to keep it simple for quote-based content
+- **Systemd service** — runs as a daemon on Ubuntu/CasaOS, starts on boot
 
+---
+
+## How it works
+
+```
+Your LLM (Ollama via n8n)
+       ↓ POST request with JSON script
+ManifestAI server
+       ↓ edge-tts voiceover
+       ↓ Pexels stock videos (2 per scene for A/B split)
+       ↓ FFmpeg composes everything + captions
+       ↓ Either returns the video or uploads to YouTube
+```
+
+The script format is simple:
+```json
+[
+  {"id": 1, "text": "You are worthy of everything you desire.", "visual_1": "sunrise over mountains", "visual_2": "person meditating sunset", "mood": "uplifting"},
+  {"id": 2, "text": "The universe rewards those who take action.", "visual_1": "person walking path", "visual_2": "stars night sky", "mood": "inspiring"}
+]
 ```
 
 ---
 
-## 🛠️ Prerequisites
+## Quick Start
 
-1. **Python 3.10+** installed.
-2. **FFmpeg** installed and added to your system PATH.
+### Prerequisites
+- Python 3.10+
+- FFmpeg
+- Pexels API key (free)
 
-- _Windows:_ `winget install ffmpeg` (or download from [ffmpeg.org](https://ffmpeg.org/download.html)).
-- _Verify:_ Type `ffmpeg -version` in your terminal.
-
-3. **API Keys:**
-
-- **Google Gemini API Key** (Free tier available).
-- **Pexels API Key** (Free).
-- No Ngrok token is required for the default voiceover path. The current pipeline uses `edge-tts`.
-
----
-
-## 🚀 Installation
-
-### 1. Clone the Repository
+### Install
 
 ```bash
-git clone https://github.com/yourusername/AutoShorts-AI.git
-cd AutoShorts-AI
-
-```
-
-### 2. Install Dependencies
-
-```bash
+git clone <your-repo-url>
+cd ContentAutomationServerSideVideoGenerator
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-
+sudo apt install ffmpeg -y
+mkdir -p assets/{audio_clips,video_clips,temp,final,avatar}
+echo "PEXELS_API_KEY=your_key_here" > .env
 ```
 
-### 3. Environment Setup
-
-Create the required folders and add your avatar:
-
-1. Create folder: `assets/avatar`
-2. Place your avatar video inside and name it: `avatars.mp4`
-
-### 4. Configure API Keys
-
-Copy `.env.example` to `.env` and fill in your key:
+### Run as server
 
 ```bash
-cp .env.example .env
+python main.py server 8765
 ```
 
-Required:
-
-- `GEMINI_API_KEY` for script generation
-- `PEXELS_API_KEY` for stock video search/download
-
-Optional:
-
-- `GEMINI_MODEL` to override the default `gemini-2.0-flash` model
-
----
-
-## 🎮 How to Run
-
-### Generate Video
-
-Run the main script:
+### Or as a systemd service (auto-start on boot)
 
 ```bash
-python main.py
-
+sudo nano /etc/systemd/system/manifestai.service
 ```
 
-1. Enter a topic (e.g., _"The Mystery of the Pyramids"_).
-2. Wait for the AI to write the script, generate audio, download stock footage, and edit the video.
-3. The final video will be saved in `assets/final/final_short.mp4`.
+```ini
+[Unit]
+Description=ManifestAI Video Generator
+After=network.target
+
+[Service]
+User=polar
+WorkingDirectory=/home/polar/ContentAutomationServerSideVideoGenerator
+ExecStart=/home/polar/ContentAutomationServerSideVideoGenerator/venv/bin/python main.py server 8765
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable manifestai
+sudo systemctl start manifestai
+```
 
 ---
 
-## 🧩 Module Breakdown
+## YouTube Upload Setup
 
-### `brain.py` ( The Writer)
+One-time OAuth to let the server upload to your channel:
 
-- **Input:** Topic string.
-- **Logic:** Prompts Gemini to create an 8-9 scene JSON script. It asks for **two** visual keywords per scene (`visual_1`, `visual_2`) to enable the A/B split effect.
+1. Go to https://console.cloud.google.com → Create project
+2. Enable **YouTube Data API v3**
+3. Create OAuth client ID → **Desktop app**
+4. Download `client_secret.json` and place it in `assets/`
+5. Run: `python setup_youtube.py`
+6. Open the URL in your browser, authorize your YouTube account
+7. Paste the code back in the terminal
 
-### `audio.py` (The Voice)
-
-- **Input:** Text script.
-- **Logic:** Generates MP3 voice clips with `edge-tts`.
-- **Post-Processing:** Reads durations with `mutagen` so scenes can be synced to audio length.
-
-### `asset_manager.py` (The Librarian)
-
-- **Input:** Visual keywords.
-- **Logic:** Searches Pexels for **Portrait (9:16)** videos. Downloads pairs of videos for every scene. Handles fallbacks (if Video B is missing, reuse Video A).
-
-### `composer.py` (The Editor)
-
-- **Input:** Audio files + Video files.
-- **Logic:**
-- **Scene Processing:** Cuts the scene duration in half. Plays Video A for the first half, Video B for the second half.
-- **Avatar Injection:** Identifies a random "middle" scene (not hook/outro) and replaces the stock footage with your Avatar loop.
-- **Stitching:** Merges all scenes using `xfade` transitions (wipes, slides).
-- **Rendering:** Exports as `yuv420p` H.264 MP4 with `faststart` flags for maximum compatibility.
+After that, include `"youtube": true` in your POST request and the video uploads automatically.
 
 ---
 
-## ⚠️ Troubleshooting
+## API
 
-**Q: The video is black or corrupt (0x80004005 error).**
+### POST `/generate`
 
-- **Fix:** This is usually a Windows codec issue. The updated `composer.py` forces `pix_fmt='yuv420p'`. Try opening the file with VLC Media Player.
+**Request:**
+```json
+{"script": [...], "youtube": true, "title": "Daily Motivation"}
+```
 
-**Q: "Avatar file missing" error.**
+**Response (with upload):**
+```json
+{"status": "uploaded", "video_id": "abc123", "url": "https://youtu.be/abc123"}
+```
 
-- **Fix:** Ensure your folder structure is exactly `assets/avatar/avatars.mp4`.
-
-**Q: The audio is silent or fails.**
-
-- **Fix:** Check your internet connection and that `edge-tts` is installed from `requirements.txt`.
-
-**Q: FFmpeg error "Exec format error" or "not found".**
-
-- **Fix:** Ensure FFmpeg is installed and accessible from your command line.
+**Response (without upload):**
+Returns the MP4 file directly.
 
 ---
 
-## 📜 License
+## n8n Workflow
 
-This project is open-source. Feel free to modify and build your own automation empire!
+1. **CRON** — daily trigger
+2. **LLM (Ollama)** — generate script JSON
+3. **Code node** — clean and format
+4. **HTTP Request** — POST to the server
+
+---
+
+## Credits
+
+- **Original project:** [AutoShorts AI](https://github.com/SaarD00/AI-Youtube-Shorts-Generator) by SaarD00
+- **This fork:** Repurposed for motivational content, added HTTP server, captions, and YouTube upload
+- **Pexels** for free stock footage
+- **edge-tts** for voice generation
+
+---
+
+## License
+
+Same as original — open source, go build something cool.
