@@ -109,6 +109,39 @@ One-time OAuth to let the server upload to your channel:
 
 After that, include `"youtube": true` in your POST request and the video uploads automatically.
 
+### Token renewal
+
+If your OAuth app is in **Testing mode**, Google expires tokens after ~7 days. You'll see `token_expired` status or an `invalid_grant` error. Fix it:
+
+```bash
+rm assets/youtube_token.pickle
+python setup_youtube.py
+```
+
+To avoid weekly renewals, publish the app: Google Cloud Console → **OAuth consent screen** → **Publish App**.
+
+Check token status anytime: `curl http://localhost:8765/token-status`
+
+---
+
+## Error Alerts (Telegram via n8n)
+
+The server can notify your phone when anything fails. Setup:
+
+1. Create a Telegram bot via [@BotFather](https://t.me/BotFather), get the token
+2. In n8n: create a **Webhook** node (POST, path `shorts-alert`) → connect a **Telegram** node (Send Message)
+3. Copy the webhook URL (e.g. `http://192.168.1.60:5678/webhook/shorts-alert`)
+4. Add it to your server `.env`:
+   ```
+   N8N_WEBHOOK_URL=http://192.168.1.60:5678/webhook/shorts-alert
+   ```
+5. Restart the service
+
+The server fires alerts for: token expiry, token expiring soon (<48h), upload failures, and video generation failures. The payload is:
+```json
+{"type": "token_expired", "message": "...", "title": "...", "time": "..."}
+```
+
 ---
 
 ## API

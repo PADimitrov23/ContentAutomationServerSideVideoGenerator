@@ -25,8 +25,22 @@ def append_log(entry):
 from modules.asset_manager import AssetManager
 from modules.audio import AudioEngine
 from modules.composer import Composer
+from modules.notify import send_alert
+from modules.youtube_uploader import TokenExpiredError, get_token_expiry, is_token_valid
+from datetime import timedelta
 
 app = FastAPI(title="YouTube Shorts Generator")
+
+def check_token_warning():
+    expiry = get_token_expiry()
+    if expiry is None:
+        return
+    now = datetime.now(expiry.tzinfo)
+    remaining = expiry - now
+    if remaining < timedelta(hours=48):
+        msg = f"YouTube token expires in {int(remaining.total_seconds() // 3600)}h. Re-auth: python setup_youtube.py"
+        print(f"⚠️ {msg}")
+        send_alert("token_expiring_soon", msg)
 
 def clean_cache():
     folders_to_clean = [
@@ -84,6 +98,20 @@ th,td{{padding:10px;text-align:left;border-bottom:1px solid #333}}th{{color:#888
 a{{color:#4fc3f7}}tr:hover{{background:#222}}</style></head>
 <body><h2>Video History</h2><table><tr><th>Date</th><th>Title</th><th>URL</th><th>Status</th></tr>{rows}</table></body></html>"""
 
+@app.get("/token-status")
+async def token_status():
+    expiry = get_token_expiry()
+    if expiry is None:
+        return {"status": "not_configured", "message": "No token yet. Run: python setup_youtube.py"}
+    now = datetime.now(expiry.tzinfo)
+    valid = is_token_valid()
+    remaining_hours = int((expiry - now).total_seconds() // 3600)
+    return {
+        "status": "valid" if valid else "expired",
+        "expires": expiry.isoformat(),
+        "valid_for_hours": remaining_hours
+    }
+
 @app.post("/debug")
 async def debug(request: Request):
     body = await request.json()
@@ -105,7 +133,15 @@ async def generate(request: Request):
             return {"status": "error", "message": "No script array found in request body"}
     else:
         return {"status": "error", "message": "Invalid request body"}
-    output_path = await generate_video(script)
+
+    try:
+        output_path = await generate_video(script)
+    except Exception as e:
+        result = {"status": "error", "message": f"Video generation failed: {e}"}
+        append_log({"date": datetime.now().isoformat(), "title": title, "url": "", "status": result["status"]})
+        send_alert("video_generation_failed", f"Content automation video generation failed: {e}", title=title)
+        return result
+
     result = {"status": "error", "message": "Video generation failed"}
     if output_path:
         if upload_to_youtube:
@@ -113,8 +149,12 @@ async def generate(request: Request):
                 from modules.youtube_uploader import upload_video
                 video_id = upload_video(output_path, title=title)
                 result = {"status": "uploaded", "video_id": video_id, "url": f"https://youtu.be/{video_id}", "title": title}
+            except TokenExpiredError as e:
+                result = {"status": "token_expired", "message": str(e), "title": title}
+                send_alert("token_expired", str(e), title=title)
             except Exception as e:
                 result = {"status": "upload_failed", "video_path": output_path, "error": str(e), "title": title}
+                send_alert("upload_failed", f"Content automation video upload failed: {e}", title=title)
         else:
             return FileResponse(output_path, media_type="video/mp4", filename="final_short.mp4")
     entry = {"date": datetime.now().isoformat(), "title": result.get("title", ""), "url": result.get("url", ""), "status": result.get("status", "")}
@@ -126,6 +166,7 @@ async def main():
         if sys.argv[1] == "server":
             port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
             print(f"Starting server on port {port}...")
+            check_token_warning()
             config = uvicorn.Config(app, host="0.0.0.0", port=port)
             server = uvicorn.Server(config)
             await server.serve()
