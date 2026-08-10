@@ -150,7 +150,9 @@ async def generate(request: Request):
             try:
                 from modules.youtube_uploader import upload_video
                 video_id = upload_video(output_path, title=title)
-                result = {"status": "uploaded", "video_id": video_id, "url": f"https://youtu.be/{video_id}", "title": title}
+                url = f"https://youtu.be/{video_id}"
+                result = {"status": "uploaded", "video_id": video_id, "url": url, "title": title}
+                send_alert("upload_success", f"Video uploaded: {title}", title=title, extra={"url": url})
             except TokenExpiredError as e:
                 result = {"status": "token_expired", "message": str(e), "title": title}
                 send_alert("token_expired", str(e), title=title)
