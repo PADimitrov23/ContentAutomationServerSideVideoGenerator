@@ -130,8 +130,10 @@ async def generate(request: Request):
         title = body.get("title", "YouTube Short")
         upload_to_youtube = body.get("youtube", False)
         if script is None:
+            send_alert("bad_request", "No script array found in request body", title="CAU")
             return {"status": "error", "message": "No script array found in request body"}
     else:
+        send_alert("bad_request", "Invalid request body", title="CAU")
         return {"status": "error", "message": "Invalid request body"}
 
     try:

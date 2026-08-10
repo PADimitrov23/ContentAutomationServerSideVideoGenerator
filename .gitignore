@@ -21,3 +21,8 @@ Thumbs.db
 /assets/avatar/avatar.mp4
 /assets/avatar/Gemini_Generated_Image_ww2ko4ww2ko4ww2k.png
 *.log
+
+# Secrets
+/assets/youtube_token.pickle
+/assets/client_secret.json
+/assets/history.json
