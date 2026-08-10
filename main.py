@@ -25,6 +25,7 @@ def append_log(entry):
 from modules.asset_manager import AssetManager
 from modules.audio import AudioEngine
 from modules.composer import Composer
+from modules.corruption import corrupt_video, get_corruption_level, increment_corruption
 from modules.notify import send_alert
 from modules.youtube_uploader import TokenExpiredError, get_token_expiry, is_token_valid
 from datetime import timedelta
@@ -74,6 +75,14 @@ async def generate_video(script):
     if not final_scene_paths:
         return None
     output_path = composer.concatenate_with_transitions(final_scene_paths)
+    if output_path:
+        corruption_level = get_corruption_level()
+        if corruption_level >= 1:
+            print(f"📼 Applying corruption level {corruption_level}...")
+            try:
+                corrupt_video(output_path, corruption_level, os.path.join(os.getcwd(), "assets", "temp"))
+            except Exception as e:
+                print(f"⚠️ Corruption pass failed ({e}); keeping original")
     clean_cache()
     return output_path
 
@@ -111,6 +120,10 @@ async def token_status():
         "expires": expiry.isoformat(),
         "valid_for_hours": remaining_hours
     }
+
+@app.get("/corruption")
+async def corruption_status():
+    return {"level": get_corruption_level()}
 
 @app.post("/debug")
 async def debug(request: Request):
@@ -151,8 +164,10 @@ async def generate(request: Request):
                 from modules.youtube_uploader import upload_video
                 video_id = upload_video(output_path, title=title)
                 url = f"https://youtu.be/{video_id}"
-                result = {"status": "uploaded", "video_id": video_id, "url": url, "title": title}
-                send_alert("upload_success", f"Video uploaded: {title}", title=title, extra={"url": url})
+                corruption_level = get_corruption_level()
+                result = {"status": "uploaded", "video_id": video_id, "url": url, "title": title, "corruption": corruption_level}
+                send_alert("upload_success", f"Video uploaded: {title} [corruption level {corruption_level}]", title=title, extra={"url": url, "corruption_level": corruption_level})
+                increment_corruption()
             except TokenExpiredError as e:
                 result = {"status": "token_expired", "message": str(e), "title": title}
                 send_alert("token_expired", str(e), title=title)
