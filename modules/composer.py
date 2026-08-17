@@ -1,177 +1,159 @@
 import os
-import random
+import tempfile
+import logging
 import ffmpeg
+
+logger = logging.getLogger(__name__)
+
+FONT_CANDIDATES = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    "C:/Windows/Fonts/arial.ttf",
+]
+
+
+def _find_font():
+    for p in FONT_CANDIDATES:
+        if os.path.exists(p):
+            return p
+    return None
+
 
 class Composer:
     def __init__(self):
         self.temp_dir = os.path.join(os.getcwd(), "assets", "temp")
         self.final_dir = os.path.join(os.getcwd(), "assets", "final")
-        self.avatar_path = os.path.join(os.getcwd(), "assets", "avatar", "avatars.mp4")
-        self.font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-        if not os.path.exists(self.font_path):
-            self.font_path = None
-        
+        self.font_path = _find_font()
         os.makedirs(self.temp_dir, exist_ok=True)
         os.makedirs(self.final_dir, exist_ok=True)
-        self.transitions = ['fade', 'diagbr', 'diagtl']
         self._textfiles = []
 
     def get_duration(self, filepath):
         try:
             probe = ffmpeg.probe(filepath)
-            return float(probe['format']['duration'])
+            return float(probe["format"]["duration"])
         except:
             return 0.0
 
-    def add_captions(self, video_stream, text, font_size=36):
+    def add_captions(self, video_stream, text, font_size=42):
         if not self.font_path or not text:
             return video_stream
-        import tempfile
+
         lines = []
         words = text.split()
         current = ""
         for word in words:
-            if len(current + " " + word) > 28:
+            if len(current + " " + word) > 35:
                 lines.append(current)
                 current = word
             else:
                 current = (current + " " + word).strip()
         if current:
             lines.append(current)
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
-            f.write("\n".join(lines[:3]))
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
+            f.write("\n".join(lines[:2]))
             textfile = f.name
         self._textfiles.append(textfile)
+
         return video_stream.filter(
-            'drawtext',
+            "drawtext",
             textfile=textfile,
             fontfile=self.font_path,
             fontsize=font_size,
-            fontcolor='white',
-            box=1,
-            boxcolor='black@0.5',
-            boxborderw=12,
-            x='(w-text_w)/2',
-            y='h-text_h-60',
-            enable='between(t,0,9999)'
+            fontcolor="white",
+            borderw=3,
+            bordercolor="black",
+            x="(w-text_w)/2",
+            y="h-text_h-100",
+            enable="between(t,0,9999)",
         )
 
-    def process_scene(self, scene, video_pair, is_avatar=False):
-        scene_id = scene['id']
-        audio_path = scene['audio_path']
-        total_duration = scene['duration']
+    def add_color_grade(self, video_stream):
+        video_stream = video_stream.filter(
+            "eq",
+            saturation=0.75,
+            contrast=1.15,
+            brightness=-0.02,
+        )
+        video_stream = video_stream.filter("curves", master="0/0.02 0.5/0.48 1/0.95")
+        return video_stream
+
+    def process_scene(self, scene, video_pair):
+        scene_id = scene["id"]
+        audio_path = scene["audio_path"]
+        total_duration = scene["duration"]
         output_path = os.path.join(self.temp_dir, f"scene_{scene_id}.mp4")
-        scene_text = scene.get('text', '')
+        scene_text = scene.get("text", "")
 
         try:
             input_audio = ffmpeg.input(audio_path)
+            path_a, path_b = video_pair
+            duration_a = total_duration / 2
+            duration_b = (total_duration / 2) + 0.5
 
-            if is_avatar:
-                video_stream = (
-                    ffmpeg.input(video_pair[0], stream_loop=-1)
-                    .trim(duration=total_duration + 0.5)
-                    .setpts('PTS-STARTPTS')
-                    .filter('crop', 'iw', 'ih-150', 0, 0)
-                    .filter('scale', 1080, 1920, force_original_aspect_ratio='increase')
-                    .filter('crop', 1080, 1920)
-                    .filter('fps', fps=30, round='up')
-                )
-            else:
-                path_a, path_b = video_pair
-                duration_a = total_duration / 2
-                duration_b = (total_duration / 2) + 0.5
+            stream_a = (
+                ffmpeg.input(path_a, stream_loop=-1)
+                .trim(duration=duration_a)
+                .setpts("PTS-STARTPTS")
+                .filter("scale", 1080, 1920)
+                .filter("crop", 1080, 1920)
+                .filter("fps", fps=30, round="up")
+            )
 
-                stream_a = (
-                    ffmpeg.input(path_a, stream_loop=-1)
-                    .trim(duration=duration_a)
-                    .setpts('PTS-STARTPTS')
-                    .filter('scale', 1080, 1920).filter('crop', 1080, 1920)
-                    .filter('fps', fps=30, round='up')
-                )
+            stream_b = (
+                ffmpeg.input(path_b, stream_loop=-1)
+                .trim(duration=duration_b)
+                .setpts("PTS-STARTPTS")
+                .filter("scale", 1080, 1920)
+                .filter("crop", 1080, 1920)
+                .filter("fps", fps=30, round="up")
+            )
 
-                stream_b = (
-                    ffmpeg.input(path_b, stream_loop=-1)
-                    .trim(duration=duration_b)
-                    .setpts('PTS-STARTPTS')
-                    .filter('scale', 1080, 1920).filter('crop', 1080, 1920)
-                    .filter('fps', fps=30, round='up')
-                )
+            video_stream = ffmpeg.concat(stream_a, stream_b, v=1, a=0)
 
-                video_stream = ffmpeg.concat(stream_a, stream_b, v=1, a=0)
-
+            video_stream = self.add_color_grade(video_stream)
             video_stream = self.add_captions(video_stream, scene_text)
 
             runner = ffmpeg.output(
                 video_stream,
                 input_audio,
                 output_path,
-                vcodec='libx264',
-                acodec='aac',
-                pix_fmt='yuv420p',
-                shortest=None
+                vcodec="libx264",
+                acodec="aac",
+                pix_fmt="yuv420p",
+                shortest=None,
             )
-
             runner.run(overwrite_output=True, quiet=True)
+            logger.info(f"Scene {scene_id} rendered: {output_path}")
             return output_path
 
         except ffmpeg.Error as e:
-            print(f"❌ Render Fail Scene {scene_id}: {e.stderr.decode('utf8') if e.stderr else str(e)}")
+            logger.error(f"Render failed scene {scene_id}: {e.stderr.decode('utf8') if e.stderr else str(e)}")
             return None
 
     def render_all_scenes(self, script_data, video_pairs):
-        """
-        Iterates script, handles Avatar injection logic (TWICE), and renders individual scenes.
-        """
         rendered_paths = []
-        
-        # 1. Randomly pick TWO distinct middle scenes for the Avatar
-        # We pick from range [1, len-2] to avoid the Hook (0) and Outro (last)
-        avatar_indices = []
-        
-        # Only inject if we have enough scenes (need at least 4 scenes to safely pick 2 middle ones)
-        if len(script_data) >= 4 and os.path.exists(self.avatar_path):
-            valid_range = list(range(1, len(script_data) - 1)) # All valid middle indices
-            
-            # Pick 2 unique indices if possible, otherwise just 1
-            count_to_pick = 2 if len(valid_range) >= 2 else 1
-            avatar_indices = random.sample(valid_range, count_to_pick)
-            
-            # Sort them just for cleaner logging
-            avatar_indices.sort()
-            human_readable_indices = [i + 1 for i in avatar_indices]
-            print(f"🎲 Avatar set for Scenes: {human_readable_indices}")
-
-        # 2. Render Loop
         for i, scene in enumerate(script_data):
             current_pair = video_pairs[i]
-            is_avatar = False
-
-            # Injection Logic: Check if current index is in our chosen list
-            if i in avatar_indices:
-                current_pair = (self.avatar_path, None)
-                is_avatar = True
-            elif current_pair is None:
-                continue 
-
-            output_path = self.process_scene(scene, current_pair, is_avatar)
+            if current_pair is None:
+                logger.warning(f"Skipping scene {scene['id']}: no video pair")
+                continue
+            output_path = self.process_scene(scene, current_pair)
             if output_path:
                 rendered_paths.append(output_path)
-        
         return rendered_paths
 
     def concatenate_with_transitions(self, video_paths, output_filename="final_short.mp4"):
-        """
-        Stitches rendered scenes together.
-        INCLUDES FIXES FOR: Windows 0x80004005 Error & Playback Issues.
-        """
-        print("🎬 Stitching final video...")
+        logger.info("Stitching final video...")
         output_path = os.path.join(self.final_dir, output_filename)
-        
+
         if os.path.exists(output_path):
             try:
                 os.remove(output_path)
             except:
-                print("⚠️ Warning: Could not delete old file. It might be open in a player.")
+                pass
 
         if not video_paths:
             return None
@@ -179,55 +161,55 @@ class Composer:
         input1 = ffmpeg.input(video_paths[0])
         v_stream = input1.video
         a_stream = input1.audio
-        
         current_dur = self.get_duration(video_paths[0])
 
         for i in range(1, len(video_paths)):
             next_clip = ffmpeg.input(video_paths[i])
             next_dur = self.get_duration(video_paths[i])
-            
-            trans_dur = 0.5
-            offset = current_dur - trans_dur
-            
-            effect = random.choice(self.transitions)
-            print(f"   ✨ Transition {i}: '{effect}' at {offset:.2f}s")
 
-            v_stream = ffmpeg.filter(
-                [v_stream, next_clip.video], 
-                'xfade', 
-                transition=effect, 
-                duration=trans_dur, 
-                offset=offset
-            )
-            
-            a_stream = ffmpeg.filter(
-                [a_stream, next_clip.audio], 
-                'acrossfade', 
-                d=trans_dur
-            )
-            
-            current_dur = (current_dur + next_dur) - trans_dur
+            if i == len(video_paths) - 1:
+                trans_dur = 0.08
+            else:
+                trans_dur = 0.0
+
+            if trans_dur > 0:
+                offset = max(0, current_dur - trans_dur)
+                v_stream = ffmpeg.filter(
+                    [v_stream, next_clip.video],
+                    "xfade",
+                    transition="fade",
+                    duration=trans_dur,
+                    offset=offset,
+                )
+                a_stream = ffmpeg.filter(
+                    [a_stream, next_clip.audio],
+                    "acrossfade",
+                    d=trans_dur,
+                )
+                current_dur = (current_dur + next_dur) - trans_dur
+            else:
+                v_stream = ffmpeg.concat(v_stream, next_clip.video, v=1, a=0)
+                a_stream = ffmpeg.concat(a_stream, next_clip.audio, v=0, a=1)
+                current_dur = current_dur + next_dur
 
         try:
             runner = ffmpeg.output(
-                v_stream, 
-                a_stream, 
-                output_path, 
-                vcodec='libx264',   # Standard H.264 video
-                acodec='aac',       # Standard AAC audio
-                pix_fmt='yuv420p',  # 🔥 FIX 1: Windows compatibility
-                movflags='faststart', # 🔥 FIX 2: Corruption fix
-                preset='medium' 
+                v_stream,
+                a_stream,
+                output_path,
+                vcodec="libx264",
+                acodec="aac",
+                pix_fmt="yuv420p",
+                movflags="faststart",
+                preset="medium",
             )
-            
             runner.run(overwrite_output=True, quiet=False)
-            
-            print(f"✅ FINAL VIDEO SAVED: {output_path}")
+            logger.info(f"Final video saved: {output_path}")
             return output_path
 
         except ffmpeg.Error as e:
-            error_log = e.stderr.decode('utf8') if e.stderr else str(e)
-            print(f"❌ Stitching Error: {error_log}")
+            error_log = e.stderr.decode("utf8") if e.stderr else str(e)
+            logger.error(f"Stitching error: {error_log}")
             return None
         finally:
             for f in self._textfiles:
