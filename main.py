@@ -65,7 +65,7 @@ from modules.asset_manager import AssetManager
 from modules.audio import AudioEngine
 from modules.composer import Composer
 from modules.notify import send_alert
-from modules.youtube_uploader import TokenExpiredError, get_token_expiry, is_token_valid
+from modules.youtube_uploader import TokenExpiredError, get_token_expiry, is_token_valid, generate_hashtags, generate_description, generate_tags
 from datetime import timedelta
 
 app = FastAPI(title="YouTube Shorts Generator - David Goggins")
@@ -233,10 +233,17 @@ async def generate(request: Request):
             try:
                 from modules.youtube_uploader import upload_video
 
-                video_id = upload_video(output_path, title=title)
+                script_text = " ".join(s.get("text", "") for s in script)
+                hashtags = generate_hashtags(script_text)
+                description = generate_description(script_text, hashtags)
+                tags = generate_tags(script_text)
+
+                title_with_tags = f"{title} {' '.join(hashtags[:5])}"
+
+                video_id = upload_video(output_path, title=title_with_tags, description=description, tags=tags)
                 url = f"https://youtu.be/{video_id}"
-                result = {"status": "uploaded", "video_id": video_id, "url": url, "title": title}
-                send_alert("upload_success", f"Video uploaded: {title}", title=title, extra={"url": url})
+                result = {"status": "uploaded", "video_id": video_id, "url": url, "title": title, "hashtags": hashtags}
+                send_alert("upload_success", f"Video uploaded: {title}", title=title, extra={"url": url, "hashtags": hashtags})
 
                 status = get_status()
                 count = status.get("videos_generated", 0) + 1
