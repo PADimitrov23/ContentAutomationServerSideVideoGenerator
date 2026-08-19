@@ -159,7 +159,7 @@ class Composer:
             return None
 
         input1 = ffmpeg.input(video_paths[0])
-        v_stream = input1.video
+        v_stream = input1.video.filter("fps", fps=30)
         a_stream = input1.audio
         current_dur = self.get_duration(video_paths[0])
 
@@ -167,33 +167,12 @@ class Composer:
             next_clip = ffmpeg.input(video_paths[i])
             next_dur = self.get_duration(video_paths[i])
 
-            if i == len(video_paths) - 1:
-                trans_dur = 0.08
-            else:
-                trans_dur = 0.0
+            next_v = next_clip.video.filter("fps", fps=30)
+            next_a = next_clip.audio
 
-            next_v = next_clip.video.filter("settb", "AVTB")
-            next_a = next_clip.audio.filter("settb", "AVTB")
-
-            if trans_dur > 0:
-                offset = max(0, current_dur - trans_dur)
-                v_stream = ffmpeg.filter(
-                    [v_stream, next_v],
-                    "xfade",
-                    transition="fade",
-                    duration=trans_dur,
-                    offset=offset,
-                )
-                a_stream = ffmpeg.filter(
-                    [a_stream, next_a],
-                    "acrossfade",
-                    d=trans_dur,
-                )
-                current_dur = (current_dur + next_dur) - trans_dur
-            else:
-                v_stream = ffmpeg.concat(v_stream, next_v, v=1, a=0)
-                a_stream = ffmpeg.concat(a_stream, next_a, v=0, a=1)
-                current_dur = current_dur + next_dur
+            v_stream = ffmpeg.concat(v_stream, next_v, v=1, a=0)
+            a_stream = ffmpeg.concat(a_stream, next_a, v=0, a=1)
+            current_dur = current_dur + next_dur
 
         try:
             runner = ffmpeg.output(
