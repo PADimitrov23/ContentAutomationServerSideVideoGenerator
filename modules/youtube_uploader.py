@@ -161,7 +161,7 @@ def get_authenticated_service():
                 redirect_uri="urn:ietf:wg:oauth:2.0:oob"
             )
             auth_url, _ = flow.authorization_url(prompt="consent")
-            logger.info(f"OPEN THIS URL: {auth_url}")
+            print(f"\nOPEN THIS URL IN YOUR BROWSER:\n{auth_url}\n")
             code = input("Enter the authorization code: ").strip()
             flow.fetch_token(code=code)
             credentials = flow.credentials
