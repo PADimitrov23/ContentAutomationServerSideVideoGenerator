@@ -238,7 +238,10 @@ async def generate(request: Request):
                 description = generate_description(script_text, hashtags)
                 tags = generate_tags(script_text)
 
+                max_title_len = 95
                 title_with_tags = f"{title} {' '.join(hashtags[:5])}"
+                if len(title_with_tags) > max_title_len:
+                    title_with_tags = title_with_tags[:max_title_len]
 
                 video_id = upload_video(output_path, title=title_with_tags, description=description, tags=tags)
                 url = f"https://youtu.be/{video_id}"
